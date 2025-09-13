@@ -28,7 +28,7 @@
                 },
                 {
                     "name": "Xcode Run Release",
-                    "cmd": [ "$project_path/build/build/Release/$project_base_name.app/Contents/MacOS/$project_base_name" ],
+                    "cmd": [ "$randomchange/build/build/Release/$project_base_name.app/Contents/MacOS/$project_base_name" ],
                 }
             ]
         }
