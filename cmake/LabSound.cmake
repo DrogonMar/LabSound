@@ -44,7 +44,7 @@ elseif (LABSOUND_USE_RTAUDIO)
     )
 endif()
 
-option(LABSOUND_INTERNAL_LIBSAMPLERATE, "Use internal libsamplerate", ON)
+option(LABSOUND_INTERNAL_LIBSAMPLERATE "Use internal libsamplerate" ON)
 if (LABSOUND_INTERNAL_LIBSAMPLERATE)
     set(LABSOUND_LSR "${LABSOUND_ROOT}/src/internal/src/samplerate.c")
 else()
