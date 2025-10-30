@@ -72,6 +72,7 @@ namespace lab {
         int32_t greatest_cursor = -1;
         std::weak_ptr<AudioContext::AudioContextInterface> ac;
         bool bus_setting_updated = false;
+        bool isProcessingAudio = false;
     };
 
     static AudioParamDescriptor s_saParams[] = {
@@ -485,6 +486,7 @@ namespace lab {
                     _internals->scheduled.clear();
                     if (diagnosing_silence)
                         ac->diagnosed_silence("SampledAudioNode::clearing schedule");
+                    _internals->isProcessingAudio = false;
                 }
                 else if (srcBus)
                 {
@@ -563,6 +565,9 @@ namespace lab {
                     r.context()->enqueueEvent(_self->_scheduler._onEnded);
             }
         }
+
+        // Check if anything scheduled is playing audio
+        _internals->isProcessingAudio = !_internals->scheduled.empty();
     }
 
     int32_t SampledAudioNode::getCursor() const
@@ -570,6 +575,10 @@ namespace lab {
         return _internals->greatest_cursor;
     }
 
+    bool SampledAudioNode::isProcessingAnything() const
+    {
+        return _internals->isProcessingAudio;
+    }
 
     /// @TODO change the interface:
     /// // if true is returned, rate_array[0] applies to the entire quantum

@@ -97,6 +97,8 @@ public:
     // instances in the most recent render quantum. A value less than zero
     // indicates nothing's playing.
     int32_t getCursor() const;
+
+    bool isProcessingAnything() const;
 };
 
 
