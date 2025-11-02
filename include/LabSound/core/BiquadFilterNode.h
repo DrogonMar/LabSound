@@ -33,6 +33,7 @@ public:
     std::shared_ptr<AudioParam> q();
     std::shared_ptr<AudioParam> gain();
     std::shared_ptr<AudioParam> detune();
+    std::shared_ptr<AudioParam> bypass();
 
     // Get the magnitude and phase response of the filter at the given
     // set of frequencies (in Hz). The phase response is in radians.

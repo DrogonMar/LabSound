@@ -12,6 +12,8 @@
 
 #include "internal/Biquad.h"
 #include <algorithm>
+#include <cstring>
+#include <vector>
 
 namespace lab
 {
@@ -26,6 +28,7 @@ static AudioParamDescriptor s_bqParams[] = {
     {"Q", "Q   ", 1.0, 0.0001, 1000.0},
     {"gain", "GAIN", 0.0, -40.0, 40.0},
     {"detune", "DTUN", 0.0, -4800.0, 4800.0},
+    {"bypass", "BYPS", 0.0, 0.0, 1.0},
     nullptr};
 
 static AudioSettingDescriptor s_bqSettings[] = {
@@ -46,12 +49,11 @@ public:
     BiquadFilterNodeInternal(BiquadFilterNode* self)
         : AudioProcessor()
     {
-        the_filter.reset(new Biquad());
-
         m_frequency = self->param("frequency");
         m_q = self->param("Q");
         m_gain = self->param("gain");
         m_detune = self->param("detune");
+        m_bypass = self->param("bypass");
         m_type = self->setting("type");
         m_type->setEnumeration(static_cast<uint32_t>(FilterType::LOWPASS));
         m_type->setValueChanged([this]() {
@@ -65,14 +67,55 @@ public:
     {
     }
 
-    virtual void initialize() override {}
+    virtual void initialize() override
+    {
+
+    }
     virtual void uninitialize() override {}
 
     virtual void process(ContextRenderLock & r,  const lab::AudioBus * sourceBus, lab::AudioBus * destinationBus, int framesToProcess) override
     {
+        int numberOfChannels = std::min(sourceBus->numberOfChannels(), destinationBus->numberOfChannels());
+
+        for (int i = m_filters.size(); i < numberOfChannels; ++i) {
+            m_filters.push_back(std::make_unique<Biquad>());
+        }
+
         checkForDirtyCoefficients(r);
         updateCoefficientsIfNecessary(r, true, false);
-        the_filter->process(sourceBus->channel(0)->data(), destinationBus->channel(0)->mutableData(), framesToProcess);
+
+        // Get bypass amount (0.0 = fully filtered, 1.0 = fully bypassed)
+        float bypassAmount = m_bypass->smoothedValue();
+
+        if (bypassAmount >= 1.0f) {
+            // Fully bypassed - just copy input to output
+            for (int channel = 0; channel < numberOfChannels; ++channel) {
+                const float* sourceData = sourceBus->channel(channel)->data();
+                float* destinationData = destinationBus->channel(channel)->mutableData();
+                std::memcpy(destinationData, sourceData, framesToProcess * sizeof(float));
+            }
+        } else if (bypassAmount <= 0.0f) {
+            // Fully filtered - process normally
+            for (int channel = 0; channel < numberOfChannels && channel < m_filters.size(); ++channel) {
+                m_filters[channel]->process(sourceBus->channel(channel)->data(), destinationBus->channel(channel)->mutableData(), framesToProcess);
+            }
+        } else {
+            // Mixed mode - blend between filtered and dry signal
+            float wetAmount = 1.0f - bypassAmount;  // wet = filtered signal
+
+            for (int channel = 0; channel < numberOfChannels && channel < m_filters.size(); ++channel) {
+                const float* sourceData = sourceBus->channel(channel)->data();
+                float* destinationData = destinationBus->channel(channel)->mutableData();
+
+                // Process the filtered signal (into destination buffer)
+                m_filters[channel]->process(sourceData, destinationData, framesToProcess);
+
+                // Mix filtered (wet) and dry signals
+                for (int frame = 0; frame < framesToProcess; ++frame) {
+                    destinationData[frame] = (destinationData[frame] * wetAmount) + (sourceData[frame] * bypassAmount);
+                }
+            }
+        }
     }
 
     virtual void reset() override {}
@@ -170,19 +213,21 @@ public:
                 normalizedFrequency *= std::pow(2.0, detune / 1200.0);
             }
 
-            // Configure the biquad with the new filter parameters for the appropriate type of filter.
+            // Configure all biquad filters with the same parameters
             // clang-format off
-            switch (m_type->valueUint32())
-            {
-                case FilterType::LOWPASS:   the_filter->setLowpassParams(normalizedFrequency, q_val);       break;
-                case FilterType::HIGHPASS:  the_filter->setHighpassParams(normalizedFrequency, q_val);      break;
-                case FilterType::BANDPASS:  the_filter->setBandpassParams(normalizedFrequency, q_val);      break;
-                case FilterType::LOWSHELF:  the_filter->setLowShelfParams(normalizedFrequency, gain);       break;
-                case FilterType::HIGHSHELF: the_filter->setHighShelfParams(normalizedFrequency, gain);      break;
-                case FilterType::PEAKING:   the_filter->setPeakingParams(normalizedFrequency, q_val, gain); break;
-                case FilterType::NOTCH:     the_filter->setNotchParams(normalizedFrequency, q_val);         break;
-                case FilterType::ALLPASS:   the_filter->setAllpassParams(normalizedFrequency, q_val);        break;
-                default: break;
+            for (auto& filter : m_filters) {
+                switch (m_type->valueUint32())
+                {
+                    case FilterType::LOWPASS:   filter->setLowpassParams(normalizedFrequency, q_val);       break;
+                    case FilterType::HIGHPASS:  filter->setHighpassParams(normalizedFrequency, q_val);      break;
+                    case FilterType::BANDPASS:  filter->setBandpassParams(normalizedFrequency, q_val);      break;
+                    case FilterType::LOWSHELF:  filter->setLowShelfParams(normalizedFrequency, gain);       break;
+                    case FilterType::HIGHSHELF: filter->setHighShelfParams(normalizedFrequency, gain);      break;
+                    case FilterType::PEAKING:   filter->setPeakingParams(normalizedFrequency, q_val, gain); break;
+                    case FilterType::NOTCH:     filter->setNotchParams(normalizedFrequency, q_val);         break;
+                    case FilterType::ALLPASS:   filter->setAllpassParams(normalizedFrequency, q_val);        break;
+                    default: break;
+                }
             }
             // clang-format on
         }
@@ -217,8 +262,9 @@ public:
     std::shared_ptr<AudioParam> m_q;
     std::shared_ptr<AudioParam> m_gain;
     std::shared_ptr<AudioParam> m_detune;
+    std::shared_ptr<AudioParam> m_bypass;
 
-    std::unique_ptr<Biquad> the_filter;
+    std::vector<std::unique_ptr<Biquad>> m_filters;
 };
  
 BiquadFilterNode::BiquadFilterNode(AudioContext & ac)
@@ -267,6 +313,11 @@ std::shared_ptr<AudioParam> BiquadFilterNode::gain()
 std::shared_ptr<AudioParam> BiquadFilterNode::detune()
 {
     return biquad_impl->m_detune;
+}
+
+std::shared_ptr<AudioParam> BiquadFilterNode::bypass()
+{
+    return biquad_impl->m_bypass;
 }
 
 }  // namespace lab
