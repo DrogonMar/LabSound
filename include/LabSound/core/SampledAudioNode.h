@@ -88,6 +88,7 @@ public:
 
     // this will clear anything playing or pending, without stopping the node itself.
     void clearSchedules();
+    void clearPlayback();
 
     std::shared_ptr<AudioParam> playbackRate() { return m_playbackRate; }
     std::shared_ptr<AudioParam> detune() { return m_detune; }

@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include "LabSound/extended/Logging.h"
 
 using namespace std;
 
@@ -36,16 +37,19 @@ AudioNodeInput::~AudioNodeInput()
 void AudioNodeInput::connect(ContextGraphLock & g, std::shared_ptr<AudioNodeInput> junction, std::shared_ptr<AudioNodeOutput> toOutput)
 {
     if (!junction || !toOutput || !junction->destinationNode()) {
+        LOG_WARN("Invalid junction/output/destinationNode");
         return;
     }
 
     // return if input is already connected to this output.
     if (junction->isConnected(toOutput)) {
+        LOG_WARN("Input is already connected to this output");
         return;
     }
 
     toOutput->addInput(g, junction);
     junction->junctionConnectOutput(toOutput);
+    LOG_DEBUG("Input connected to output");
 }
 
 void AudioNodeInput::disconnect(ContextGraphLock & g, std::shared_ptr<AudioNodeInput> junction, std::shared_ptr<AudioNodeOutput> toOutput)

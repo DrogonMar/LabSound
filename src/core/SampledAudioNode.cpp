@@ -119,6 +119,23 @@ namespace lab {
         _internals->incoming.enqueue({ 0., 0,0,0, -2 });
     }
 
+    void SampledAudioNode::clearPlayback()
+    {
+        //Clears all playbacks but never events
+        std::vector<Scheduled> events;
+        Scheduled s;
+        while (_internals->incoming.try_dequeue(s)) {
+            if (s.loopCount < 0) {
+                events.push_back(s);
+            }
+        }
+
+        for (auto& s : events) {
+            _internals->incoming.enqueue(s);
+        }
+        _internals->incoming.enqueue({ 0., 0,0,0, -4 });
+    }
+
     void SampledAudioNode::setBus(std::shared_ptr<AudioBus> sourceBus)
     {
         // loop count of -3 means set the bus.
@@ -471,7 +488,26 @@ namespace lab {
             Scheduled s;
             while (_internals->incoming.try_dequeue(s))
             {
-                if (s.loopCount == -3)
+                if (s.loopCount == -4)
+                {
+                    //Remove all playback
+                    std::vector<Scheduled> tmp;
+                    for (auto& item : _internals->scheduled)
+                    {
+                        if (item.loopCount > 0)
+                        {
+                            tmp.push_back(item);
+                        }
+                    }
+                    _internals->scheduled.clear();
+                    for (auto& item : tmp)
+                    {
+                        _internals->scheduled.push_back(item);
+                    }
+                    if (diagnosing_silence)
+                        ac->diagnosed_silence("SampledAudioNode::clearing playback");
+                }
+                else if (s.loopCount == -3)
                 {
                     m_retainedSourceBus = s.sourceBus;
                     m_sourceBus->setBus(s.sourceBus.get());

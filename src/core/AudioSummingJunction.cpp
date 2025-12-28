@@ -65,8 +65,10 @@ int AudioSummingJunction::numberOfRenderingConnections(ContextRenderLock &) cons
 void AudioSummingJunction::junctionConnectOutput(std::shared_ptr<AudioNodeOutput> o)
 {
     if (!o)
+    {
+        LOG_WARN("Null node output");
         return;
-
+    }
     std::lock_guard<std::mutex> lock(junctionMutex);
 
     for (std::vector<std::weak_ptr<AudioNodeOutput>>::iterator i = m_connectedOutputs.begin(); i != m_connectedOutputs.end();)
@@ -77,7 +79,11 @@ void AudioSummingJunction::junctionConnectOutput(std::shared_ptr<AudioNodeOutput
 
     for (auto i : m_connectedOutputs)
         if (i.lock() == o)
+        {
+            LOG_WARN("Already connected");
             return;
+        }
+
 
     m_connectedOutputs.push_back(o);
     m_renderingStateNeedUpdating = true;
